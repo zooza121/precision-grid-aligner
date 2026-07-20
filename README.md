@@ -4,6 +4,10 @@ Precision Grid Aligner is a lightweight Foundry VTT v13 module for accurately al
 
 It provides two draggable green three-quarter-circle markers that define the diagonal corners of an exact 3×3 grid area. The transparent quarter of each marker points inward toward the measured grid.
 
+## Demo
+
+![Precision Grid Aligner Demo](assets/GridAlignment.gif)
+
 ## Features
 
 - Two independently draggable green three-quarter-circle markers
@@ -129,6 +133,10 @@ Released under the MIT License. See `LICENSE` for details.
 Precision Grid Aligner ist ein kleines Foundry-VTT-v13-Modul zur präzisen Ausrichtung des Szenenrasters an einem bereits vorhandenen Battlemap-Grid.
 
 Dafür stehen zwei verschiebbare grüne Dreiviertelkreis-Marker zur Verfügung. Sie markieren die diagonalen Ecken eines exakt 3×3 Felder großen Messbereichs. Das transparente Viertel jedes Markers zeigt dabei nach innen in Richtung des gemessenen Rasters.
+
+## Demo
+
+![Precision Grid Aligner Demo](assets/GridAlignment.gif)
 
 ## Funktionen
 
