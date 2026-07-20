@@ -35,7 +35,7 @@ It provides two draggable green three-quarter-circle markers that define the dia
 4. Paste the module manifest URL into the **Manifest URL** field:
 
 ```text
-https://github.com/YOUR-GITHUB-NAME/precision-grid-aligner/releases/latest/download/module.json
+https://github.com/zooza121/precision-grid-aligner/releases/latest/download/module.json
 ```
 
 5. Click **Install**.
@@ -161,7 +161,7 @@ Dafür stehen zwei verschiebbare grüne Dreiviertelkreis-Marker zur Verfügung. 
 4. Die Manifest-URL in das Feld **Manifest URL** einfügen:
 
 ```text
-https://github.com/DEIN-GITHUB-NAME/precision-grid-aligner/releases/latest/download/module.json
+https://github.com/zooza121/precision-grid-aligner/releases/latest/download/module.json
 ```
 
 5. Auf **Install** klicken.
