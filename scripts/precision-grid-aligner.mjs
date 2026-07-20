@@ -1,7 +1,6 @@
 const MODULE_ID = "precision-grid-aligner";
 const ROOT_ID = `${MODULE_ID}-overlay`;
 const PANEL_ID = `${MODULE_ID}-panel`;
-const LAUNCHER_ID = `${MODULE_ID}-launcher`;
 const REFERENCE_SIZE = 100;
 const MIN_GRID_SIZE = 20;
 
@@ -10,7 +9,6 @@ const state = {
   root: null,
   svg: null,
   panel: null,
-  launcher: null,
   handles: [],
   activePointer: null,
   anchors: [null, null],
@@ -19,7 +17,6 @@ const state = {
   split: false,
   fineX: 0,
   fineY: 0,
-  hookIds: []
 };
 
 Hooks.once("init", () => {
@@ -35,20 +32,39 @@ Hooks.once("init", () => {
   });
 });
 
-Hooks.once("ready", () => {
-  createLauncher();
-  refreshLauncherVisibility();
+Hooks.on("getSceneControlButtons", (controls) => {
+  controls[MODULE_ID] = {
+    name: MODULE_ID,
+    title: "PGA.Launcher.Tooltip",
+    icon: "fa-solid fa-border-all",
+    order: 45,
+    activeTool: `${MODULE_ID}-open`,
+    visible: Boolean(game.user?.isGM),
+    onChange: (_event, active) => {
+      if (active && !state.open) openWizard();
+    },
+    tools: {
+      [`${MODULE_ID}-open`]: {
+        name: `${MODULE_ID}-open`,
+        title: "PGA.Launcher.Tooltip",
+        icon: "fa-solid fa-border-all",
+        order: 0,
+        button: true,
+        visible: Boolean(game.user?.isGM),
+        onChange: () => {
+          if (!state.open) openWizard();
+        }
+      }
+    }
+  };
 });
 
 Hooks.on("canvasReady", () => {
-  createLauncher();
-  refreshLauncherVisibility();
   if (state.open) refreshOverlay();
 });
 
 Hooks.on("canvasTearDown", () => {
   closeWizard();
-  refreshLauncherVisibility();
 });
 
 Hooks.on("canvasPan", () => {
@@ -67,31 +83,6 @@ function notify(level, key) {
   ui.notifications?.[level]?.(t(key));
 }
 
-function createLauncher() {
-  if (document.getElementById(LAUNCHER_ID)) {
-    state.launcher = document.getElementById(LAUNCHER_ID);
-    return;
-  }
-
-  const button = document.createElement("button");
-  button.id = LAUNCHER_ID;
-  button.type = "button";
-  button.className = "pga-launcher";
-  button.title = t("PGA.Launcher.Tooltip");
-  button.setAttribute("aria-label", t("PGA.Launcher.Tooltip"));
-  button.innerHTML = '<i class="fa-solid fa-border-all" aria-hidden="true"></i>';
-  button.addEventListener("click", toggleWizard);
-  document.body.append(button);
-  state.launcher = button;
-}
-
-function refreshLauncherVisibility() {
-  if (!state.launcher) return;
-  const visible = Boolean(game.user?.isGM && canvas?.ready && canvas?.scene);
-  state.launcher.classList.toggle("pga-hidden", !visible);
-  state.launcher.classList.toggle("pga-active", state.open);
-}
-
 function toggleWizard() {
   if (state.open) closeWizard();
   else openWizard();
@@ -106,7 +97,6 @@ function openWizard() {
   createOverlay();
   createPanel();
   state.open = true;
-  refreshLauncherVisibility();
   refreshOverlay();
 }
 
@@ -119,7 +109,6 @@ function closeWizard() {
   state.svg = null;
   state.panel = null;
   state.handles = [];
-  refreshLauncherVisibility();
 }
 
 function initializeStateFromScene() {
@@ -293,7 +282,10 @@ function createHandle(index, className) {
     if (state.activePointer.index !== index) return;
     const point = screenToWorld(event.clientX, event.clientY);
     if (!point) return;
-    state.anchors[index] = point;
+    state.anchors[index] = {
+      x: point.x - state.fineX,
+      y: point.y - state.fineY
+    };
     refreshOverlay();
   });
 
@@ -474,14 +466,41 @@ function updateStatus() {
   `;
 }
 
+function effectiveAnchor(index) {
+  const anchor = state.anchors[index];
+  if (!anchor) return null;
+  return {
+    x: anchor.x + state.fineX,
+    y: anchor.y + state.fineY
+  };
+}
+
+function updateHandleOrientations() {
+  const first = effectiveAnchor(0);
+  const second = effectiveAnchor(1);
+  if (!first || !second) return;
+
+  setHandleOpening(state.handles[0], second.x - first.x, second.y - first.y);
+  setHandleOpening(state.handles[1], first.x - second.x, first.y - second.y);
+}
+
+function setHandleOpening(handle, dx, dy) {
+  if (!handle) return;
+  handle.classList.remove("pga-cut-ne", "pga-cut-se", "pga-cut-sw", "pga-cut-nw");
+  const horizontal = dx >= 0 ? "e" : "w";
+  const vertical = dy >= 0 ? "s" : "n";
+  handle.classList.add(`pga-cut-${vertical}${horizontal}`);
+}
+
 function refreshOverlay() {
   if (!state.open || !state.root || !canvas?.ready) return;
   state.handles.forEach((handle, index) => {
-    const point = worldToScreen(state.anchors[index]);
+    const point = worldToScreen(effectiveAnchor(index));
     if (!point) return;
     handle.style.left = `${point.x}px`;
     handle.style.top = `${point.y}px`;
   });
+  updateHandleOrientations();
   drawPreview();
   updateStatus();
 }
@@ -516,14 +535,13 @@ function drawPreview() {
   const majorSize = calculateMajorSize();
   if (!Number.isFinite(majorSize) || majorSize <= 0) return;
 
-  const origin = {
-    x: state.anchors[0].x + state.fineX,
-    y: state.anchors[0].y + state.fineY
-  };
+  const origin = effectiveAnchor(0);
+  const endpoint = effectiveAnchor(1);
+  if (!origin || !endpoint) return;
   const grid = createGrid(state.kind, majorSize);
   const rendered = grid ? drawGridCells(grid, origin) : false;
   if (!rendered) drawFallbackPreview(origin, majorSize);
-  drawConnector(origin, state.anchors[1]);
+  drawConnector(origin, endpoint);
 }
 
 function normalizedShape(grid) {
@@ -549,8 +567,8 @@ function drawGridCells(grid, origin) {
   }, shape[0]);
 
   let count = 0;
-  for (let i = -1; i <= 3; i += 1) {
-    for (let j = -1; j <= 3; j += 1) {
+  for (let i = 0; i < 3; i += 1) {
+    for (let j = 0; j < 3; j += 1) {
       const center = getCenter(grid, i, j);
       if (!center) continue;
       const worldPoints = shape.map((point) => ({
@@ -624,10 +642,7 @@ async function applyAlignment() {
 
   const scene = canvas.scene;
   const dimensions = candidateDimensions(finalGrid, scene);
-  const previewOrigin = {
-    x: state.anchors[0].x + state.fineX,
-    y: state.anchors[0].y + state.fineY
-  };
+  const previewOrigin = effectiveAnchor(0);
   const target = nearestGridVertex(finalGrid, previewOrigin, dimensions);
   const shift = {
     x: target.x - previewOrigin.x,

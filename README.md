@@ -4,7 +4,7 @@ Ein kleines Foundry-VTT-v13-Modul zur präzisen Ausrichtung von Battlemap-Grids.
 
 ## Funktionen
 
-- Zwei verschiebbare grüne 3/4-Kreis-Marker für eine 3×3-Messung
+- Zwei verschiebbare grüne 3/4-Kreis-Marker für eine exakt begrenzte 3×3-Messung
 - Quadratisches Grid
 - Horizontal Hex (flache Ober-/Unterkante)
 - Vertical Hex (Spitze oben/unten)
@@ -13,6 +13,7 @@ Ein kleines Foundry-VTT-v13-Modul zur präzisen Ausrichtung von Battlemap-Grids.
 - Sehr feine horizontale und vertikale Korrektur von −10 bis +10 px
 - Separater Reset-Button für beide Regler
 - Deutsches und englisches UI
+- Eigener Eintrag in der linken Foundry-Werkzeugleiste
 - Tastenkürzel: **Umschalt+G**
 
 ## Installation
@@ -20,7 +21,7 @@ Ein kleines Foundry-VTT-v13-Modul zur präzisen Ausrichtung von Battlemap-Grids.
 1. Den Ordner `precision-grid-aligner` nach `FoundryVTT/Data/modules/` kopieren.
 2. Foundry VTT neu starten.
 3. Das Modul unter **Module verwalten** aktivieren.
-4. Eine Szene öffnen und als Spielleitung auf das Grid-Symbol klicken oder **Umschalt+G** drücken.
+4. Eine Szene öffnen und als Spielleitung den Precision-Grid-Aligner in der linken Werkzeugleiste auswählen oder **Umschalt+G** drücken.
 
 ## Bedienung
 
@@ -29,7 +30,7 @@ Ein kleines Foundry-VTT-v13-Modul zur präzisen Ausrichtung von Battlemap-Grids.
 3. Den zweiten Marker auf die entsprechende Ecke exakt drei Felder nach rechts/unten setzen.
 4. Die Messdistanz eines sichtbaren Kartenfeldes in Fuß angeben.
 5. Bei einem quadratischen 10-/15-/20-ft-Grid optional **In 5-ft-Felder unterteilen** aktivieren.
-6. Mit den beiden Reglern die Vorschau fein verschieben. Jeder Regler hat in der Mitte den Wert 0 und einen eigenen Reset-Button.
+6. Mit den beiden Reglern die gesamte Messhilfe inklusive Raster und beider Kreise fein verschieben. Jeder Regler hat in der Mitte den Wert 0 und einen eigenen Reset-Button.
 7. **Übernehmen** anklicken.
 
 ## Verhalten und Grenzen
