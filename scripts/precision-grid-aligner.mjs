@@ -212,18 +212,47 @@ function referenceDelta(kind, size) {
   return { x: size * 3, y: size * 3 };
 }
 
-function calculateMajorSize() {
-  const a = state.anchors[0];
-  const b = state.anchors[1];
+function calculateMajorGeometry(kind = state.kind, anchors = state.anchors) {
+  const a = anchors[0];
+  const b = anchors[1];
+  if (!a || !b) return null;
+
   const measured = {
     x: Math.abs(b.x - a.x),
     y: Math.abs(b.y - a.y)
   };
-  const reference = referenceDelta(state.kind, REFERENCE_SIZE);
+  const reference = referenceDelta(kind, REFERENCE_SIZE);
+  if (!reference.x || !reference.y) return null;
+
+  const sizeX = REFERENCE_SIZE * measured.x / Math.abs(reference.x);
+  const sizeY = REFERENCE_SIZE * measured.y / Math.abs(reference.y);
   const denominator = reference.x ** 2 + reference.y ** 2;
-  if (!denominator) return NaN;
-  const scale = (measured.x * reference.x + measured.y * reference.y) / denominator;
-  return REFERENCE_SIZE * scale;
+  if (!denominator) return null;
+
+  // Foundry stores one native grid size. Use the least-squares mean as the
+  // target regular grid size, while the preview itself remains freely
+  // stretchable on both axes between the two anchors.
+  const size = REFERENCE_SIZE
+    * ((measured.x * Math.abs(reference.x)) + (measured.y * Math.abs(reference.y)))
+    / denominator;
+
+  return { measured, reference, sizeX, sizeY, size };
+}
+
+function calculateMajorSize(kind = state.kind, anchors = state.anchors) {
+  return calculateMajorGeometry(kind, anchors)?.size ?? NaN;
+}
+
+function moveAnchorToPointer(index, pointerPoint) {
+  if (!state.anchors[index]) return;
+  state.anchors[index] = {
+    x: pointerPoint.x - state.fineX,
+    y: pointerPoint.y - state.fineY
+  };
+}
+
+function changeGridKind(kind) {
+  state.kind = kind;
 }
 
 function calculateNativeSize() {
@@ -282,10 +311,7 @@ function createHandle(index, className) {
     if (state.activePointer.index !== index) return;
     const point = screenToWorld(event.clientX, event.clientY);
     if (!point) return;
-    state.anchors[index] = {
-      x: point.x - state.fineX,
-      y: point.y - state.fineY
-    };
+    moveAnchorToPointer(index, point);
     refreshOverlay();
   });
 
@@ -360,7 +386,7 @@ function createPanel() {
     input.checked = input.value === state.kind;
     input.addEventListener("change", () => {
       if (!input.checked) return;
-      state.kind = input.value;
+      changeGridKind(input.value);
       if (!canSplit(state.measurement, state.kind)) state.split = false;
       updatePanelState();
       refreshOverlay();
@@ -447,16 +473,16 @@ function updateStatus() {
   const status = state.panel?.querySelector('[data-role="status"]');
   if (!status) return;
 
-  const major = calculateMajorSize();
+  const geometry = calculateMajorGeometry();
   const native = calculateNativeSize();
-  if (!Number.isFinite(major) || !Number.isFinite(native)) {
+  if (!geometry || !Number.isFinite(native)) {
     status.textContent = t("PGA.Status.Invalid");
     status.classList.add("pga-status-error");
     return;
   }
 
   status.classList.toggle("pga-status-error", native < MIN_GRID_SIZE);
-  const majorLabel = `${major.toFixed(2)} px / ${state.measurement || 0} ft`;
+  const majorLabel = `${geometry.sizeX.toFixed(2)} × ${geometry.sizeY.toFixed(2)} px / ${state.measurement || 0} ft`;
   const nativeLabel = state.split
     ? `${native.toFixed(2)} px / 5 ft`
     : `${native.toFixed(2)} px / ${state.measurement || 0} ft`;
@@ -532,15 +558,21 @@ function drawPreview() {
   if (!state.svg) return;
   clearSvg();
 
-  const majorSize = calculateMajorSize();
-  if (!Number.isFinite(majorSize) || majorSize <= 0) return;
+  const geometry = calculateMajorGeometry();
+  if (!geometry || geometry.measured.x <= 0 || geometry.measured.y <= 0) return;
 
   const origin = effectiveAnchor(0);
   const endpoint = effectiveAnchor(1);
   if (!origin || !endpoint) return;
-  const grid = createGrid(state.kind, majorSize);
-  const rendered = grid ? drawGridCells(grid, origin) : false;
-  if (!rendered) drawFallbackPreview(origin, majorSize);
+
+  const transform = {
+    origin,
+    scaleX: (endpoint.x - origin.x) / geometry.reference.x,
+    scaleY: (endpoint.y - origin.y) / geometry.reference.y
+  };
+  const grid = createGrid(state.kind, REFERENCE_SIZE);
+  const rendered = grid ? drawGridCells(grid, transform) : false;
+  if (!rendered) drawFallbackPreview(origin, endpoint);
   drawConnector(origin, endpoint);
 }
 
@@ -557,7 +589,7 @@ function normalizedShape(grid) {
   }
 }
 
-function drawGridCells(grid, origin) {
+function drawGridCells(grid, transform) {
   const shape = normalizedShape(grid);
   const baseCenter = getCenter(grid, 0, 0);
   if (!shape || !baseCenter) return false;
@@ -571,10 +603,14 @@ function drawGridCells(grid, origin) {
     for (let j = 0; j < 3; j += 1) {
       const center = getCenter(grid, i, j);
       if (!center) continue;
-      const worldPoints = shape.map((point) => ({
-        x: origin.x + (center.x - baseCenter.x) + (point.x - referenceVertex.x),
-        y: origin.y + (center.y - baseCenter.y) + (point.y - referenceVertex.y)
-      }));
+      const worldPoints = shape.map((point) => {
+        const localX = (center.x - baseCenter.x) + (point.x - referenceVertex.x);
+        const localY = (center.y - baseCenter.y) + (point.y - referenceVertex.y);
+        return {
+          x: transform.origin.x + localX * transform.scaleX,
+          y: transform.origin.y + localY * transform.scaleY
+        };
+      });
       appendPolygon(worldPoints);
       count += 1;
     }
@@ -591,17 +627,19 @@ function appendPolygon(worldPoints) {
   state.svg.append(polygon);
 }
 
-function drawFallbackPreview(origin, size) {
-  const end = { x: origin.x + size * 3, y: origin.y + size * 3 };
+function drawFallbackPreview(origin, endpoint) {
   for (let index = 0; index <= 3; index += 1) {
+    const ratio = index / 3;
+    const x = origin.x + (endpoint.x - origin.x) * ratio;
+    const y = origin.y + (endpoint.y - origin.y) * ratio;
     appendLine(
-      { x: origin.x + size * index, y: origin.y },
-      { x: origin.x + size * index, y: end.y },
+      { x, y: origin.y },
+      { x, y: endpoint.y },
       "pga-grid-line"
     );
     appendLine(
-      { x: origin.x, y: origin.y + size * index },
-      { x: end.x, y: origin.y + size * index },
+      { x: origin.x, y },
+      { x: endpoint.x, y },
       "pga-grid-line"
     );
   }
@@ -626,9 +664,13 @@ function appendLine(worldA, worldB, className) {
 
 async function applyAlignment() {
   const measurement = Number(state.measurement);
+  const geometry = calculateMajorGeometry();
   const nativeSizeFloat = calculateNativeSize();
   if (!Number.isFinite(measurement) || measurement <= 0) {
     return notify("error", "PGA.Notifications.InvalidMeasurement");
+  }
+  if (!geometry || geometry.measured.x <= 0 || geometry.measured.y <= 0) {
+    return notify("error", "PGA.Notifications.InvalidGridSize");
   }
   if (!Number.isFinite(nativeSizeFloat) || nativeSizeFloat < MIN_GRID_SIZE) {
     return notify("error", "PGA.Notifications.InvalidGridSize");
@@ -636,27 +678,80 @@ async function applyAlignment() {
 
   const nativeSize = Math.round(nativeSizeFloat);
   const finalDistance = state.split ? 5 : measurement;
+  const subdivision = state.split ? state.measurement / 5 : 1;
+  const finalMajorSize = nativeSize * subdivision;
   const type = gridTypeForKind(state.kind);
   const finalGrid = createGrid(state.kind, nativeSize, finalDistance);
   if (!finalGrid) return notify("error", "PGA.Notifications.GridConstructionFailed");
 
   const scene = canvas.scene;
-  const dimensions = candidateDimensions(finalGrid, scene);
   const previewOrigin = effectiveAnchor(0);
-  const target = nearestGridVertex(finalGrid, previewOrigin, dimensions);
-  const shift = {
-    x: target.x - previewOrigin.x,
-    y: target.y - previewOrigin.y
+  const previewEndpoint = effectiveAnchor(1);
+  if (!previewOrigin || !previewEndpoint) {
+    return notify("error", "PGA.Notifications.InvalidGridSize");
+  }
+
+  const selectedDelta = {
+    x: previewEndpoint.x - previewOrigin.x,
+    y: previewEndpoint.y - previewOrigin.y
+  };
+  if (Math.abs(selectedDelta.x) < 1 || Math.abs(selectedDelta.y) < 1) {
+    return notify("error", "PGA.Notifications.InvalidGridSize");
+  }
+
+  const firstImagePoint = captureBackgroundCoordinate(previewOrigin);
+  const secondImagePoint = captureBackgroundCoordinate(previewEndpoint);
+  if (!firstImagePoint || !secondImagePoint) {
+    return notify("error", "PGA.Notifications.InvalidGridSize");
+  }
+
+  const currentWidth = Number(scene.width ?? scene._source.width);
+  const currentHeight = Number(scene.height ?? scene._source.height);
+  if (!(currentWidth > 0) || !(currentHeight > 0)) {
+    return notify("error", "PGA.Notifications.InvalidGridSize");
+  }
+
+  const targetMagnitude = referenceDelta(state.kind, finalMajorSize);
+  const targetDelta = {
+    x: Math.sign(selectedDelta.x || 1) * Math.abs(targetMagnitude.x),
+    y: Math.sign(selectedDelta.y || 1) * Math.abs(targetMagnitude.y)
   };
 
-  const background = scene._source.background ?? {};
+  // Estimate the required rendered background size from the current displayed
+  // texture. The scene itself is then rounded to dimensions which contain only
+  // complete grid cells. Any remaining difference is represented by the
+  // background texture scale instead of by canvas padding or partial cells.
+  const currentBackgroundSpan = getBackgroundWorldSpan() ?? {
+    width: currentWidth,
+    height: currentHeight
+  };
+  const desiredBackgroundWidth = Math.max(
+    1,
+    currentBackgroundSpan.width * Math.abs(targetDelta.x / selectedDelta.x)
+  );
+  const desiredBackgroundHeight = Math.max(
+    1,
+    currentBackgroundSpan.height * Math.abs(targetDelta.y / selectedDelta.y)
+  );
+  const wholeScene = wholeGridSceneDimensions(
+    finalGrid,
+    desiredBackgroundWidth,
+    desiredBackgroundHeight
+  );
+
   const update = {
+    width: wholeScene.width,
+    height: wholeScene.height,
+    padding: 0,
     "grid.type": type,
     "grid.size": nativeSize,
     "grid.distance": finalDistance,
     "grid.units": "ft",
-    "background.offsetX": Number(background.offsetX || 0) + shift.x,
-    "background.offsetY": Number(background.offsetY || 0) + shift.y,
+    "background.fit": "fill",
+    "background.scaleX": desiredBackgroundWidth / wholeScene.width,
+    "background.scaleY": desiredBackgroundHeight / wholeScene.height,
+    "background.offsetX": 0,
+    "background.offsetY": 0,
     [`flags.${MODULE_ID}.gridKind`]: state.kind,
     [`flags.${MODULE_ID}.majorMeasurement`]: measurement,
     [`flags.${MODULE_ID}.splitIntoFive`]: Boolean(state.split)
@@ -665,6 +760,12 @@ async function applyAlignment() {
   closeWizard();
   try {
     await scene.update(update);
+    await calibrateBackgroundToAnchors(
+      scene,
+      firstImagePoint,
+      secondImagePoint,
+      targetDelta
+    );
     notify("info", "PGA.Notifications.Applied");
   } catch (error) {
     console.error(`${MODULE_ID} | Failed to update scene`, error);
@@ -672,9 +773,220 @@ async function applyAlignment() {
   }
 }
 
-function candidateDimensions(grid, scene) {
+/**
+ * Store a point as normalized coordinates within the rendered background mesh.
+ * This survives changes to scene dimensions, background scale, and offsets.
+ */
+function captureBackgroundCoordinate(point) {
+  const mesh = canvas?.primary?.background;
+  if (mesh?.toLocal && mesh?.getLocalBounds && canvas?.stage) {
+    try {
+      const local = mesh.toLocal(new PIXI.Point(point.x, point.y), canvas.stage);
+      const bounds = mesh.getLocalBounds();
+      if (bounds.width > 0 && bounds.height > 0) {
+        return {
+          mode: "mesh",
+          u: (local.x - bounds.x) / bounds.width,
+          v: (local.y - bounds.y) / bounds.height
+        };
+      }
+    } catch (_error) {
+      // Fall back to the Scene rectangle representation below.
+    }
+  }
+
+  const scene = canvas.scene;
+  const dimensions = scene.dimensions ?? canvas.dimensions;
+  const background = scene._source.background ?? {};
+  const width = Number(scene.width ?? scene._source.width);
+  const height = Number(scene.height ?? scene._source.height);
+  const sceneX = Number(dimensions.sceneX ?? dimensions.x ?? 0);
+  const sceneY = Number(dimensions.sceneY ?? dimensions.y ?? 0);
+  const offsetX = Number(background.offsetX || 0);
+  const offsetY = Number(background.offsetY || 0);
+  if (!(width > 0) || !(height > 0)) return null;
+  return {
+    mode: "scene",
+    u: (point.x - sceneX - offsetX) / width,
+    v: (point.y - sceneY - offsetY) / height
+  };
+}
+
+function backgroundCoordinateToWorld(coordinate) {
+  const mesh = canvas?.primary?.background;
+  if (coordinate?.mode === "mesh" && mesh?.toGlobal && mesh?.getLocalBounds && canvas?.stage) {
+    try {
+      const bounds = mesh.getLocalBounds();
+      const local = new PIXI.Point(
+        bounds.x + coordinate.u * bounds.width,
+        bounds.y + coordinate.v * bounds.height
+      );
+      const global = mesh.toGlobal(local);
+      const world = canvas.stage.toLocal(global);
+      if (Number.isFinite(world.x) && Number.isFinite(world.y)) {
+        return { x: world.x, y: world.y };
+      }
+    } catch (_error) {
+      // Fall back to the Scene rectangle representation below.
+    }
+  }
+
+  const scene = canvas.scene;
+  const dimensions = scene.dimensions ?? canvas.dimensions;
+  const background = scene._source.background ?? {};
+  const width = Number(scene.width ?? scene._source.width);
+  const height = Number(scene.height ?? scene._source.height);
+  const sceneX = Number(dimensions.sceneX ?? dimensions.x ?? 0);
+  const sceneY = Number(dimensions.sceneY ?? dimensions.y ?? 0);
+  return {
+    x: sceneX + Number(background.offsetX || 0) + coordinate.u * width,
+    y: sceneY + Number(background.offsetY || 0) + coordinate.v * height
+  };
+}
+
+function getBackgroundWorldSpan() {
+  const mesh = canvas?.primary?.background;
+  if (!mesh?.toGlobal || !mesh?.getLocalBounds || !canvas?.stage) return null;
   try {
-    const dimensions = grid.calculateDimensions(scene.width, scene.height, scene.padding);
+    const bounds = mesh.getLocalBounds();
+    if (!(bounds.width > 0) || !(bounds.height > 0)) return null;
+    const topLeft = canvas.stage.toLocal(mesh.toGlobal(new PIXI.Point(bounds.x, bounds.y)));
+    const topRight = canvas.stage.toLocal(mesh.toGlobal(new PIXI.Point(bounds.x + bounds.width, bounds.y)));
+    const bottomLeft = canvas.stage.toLocal(mesh.toGlobal(new PIXI.Point(bounds.x, bounds.y + bounds.height)));
+    const width = Math.hypot(topRight.x - topLeft.x, topRight.y - topLeft.y);
+    const height = Math.hypot(bottomLeft.x - topLeft.x, bottomLeft.y - topLeft.y);
+    if (!(width > 0) || !(height > 0)) return null;
+    return { width, height };
+  } catch (_error) {
+    return null;
+  }
+}
+
+/**
+ * Find Scene dimensions which are stable with zero padding and consist only of
+ * complete cells for the selected grid implementation.
+ */
+function wholeGridSceneDimensions(grid, desiredWidth, desiredHeight) {
+  const size = Math.max(Number(grid.size) || MIN_GRID_SIZE, MIN_GRID_SIZE);
+  if (grid.isSquare) {
+    return {
+      width: Math.max(size, Math.round(desiredWidth / size) * size),
+      height: Math.max(size, Math.round(desiredHeight / size) * size)
+    };
+  }
+
+  let width = Math.max(1, Math.round(desiredWidth));
+  let height = Math.max(1, Math.round(desiredHeight));
+  for (let iteration = 0; iteration < 8; iteration += 1) {
+    let dimensions;
+    try {
+      dimensions = grid.calculateDimensions(width, height, 0);
+    } catch (_error) {
+      break;
+    }
+    const nextWidth = Math.max(1, Math.round(Number(dimensions.width) || width));
+    const nextHeight = Math.max(1, Math.round(Number(dimensions.height) || height));
+    if (nextWidth === width && nextHeight === height) break;
+    width = nextWidth;
+    height = nextHeight;
+  }
+  return { width, height };
+}
+
+/**
+ * Foundry may rebuild the active Canvas asynchronously after a Scene update.
+ * Wait until the background mesh for this Scene is available before measuring.
+ */
+async function waitForSceneBackground(scene, frames = 30) {
+  let readyFrames = 0;
+  for (let frame = 0; frame < frames; frame += 1) {
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const ready = Boolean(
+      canvas?.ready
+      && canvas.scene?.id === scene.id
+      && canvas.primary?.background
+    );
+    readyFrames = ready ? readyFrames + 1 : 0;
+    // Require two consecutive rendered frames so a Scene update cannot be
+    // measured against the previous background mesh.
+    if (readyFrames >= 2) return true;
+  }
+  return false;
+}
+
+/**
+ * Calibrate against the background mesh which Foundry actually rendered. This
+ * avoids assumptions about texture anchors and makes both selected image points
+ * land on the requested 3x3 grid anchors after Scene rounding.
+ */
+async function calibrateBackgroundToAnchors(
+  scene,
+  firstImagePoint,
+  secondImagePoint,
+  targetDelta
+) {
+  for (let iteration = 0; iteration < 6; iteration += 1) {
+    await waitForSceneBackground(scene);
+    const first = backgroundCoordinateToWorld(firstImagePoint);
+    const second = backgroundCoordinateToWorld(secondImagePoint);
+    if (!first || !second) return;
+
+    const actualDelta = {
+      x: second.x - first.x,
+      y: second.y - first.y
+    };
+    if (Math.abs(actualDelta.x) < 0.001 || Math.abs(actualDelta.y) < 0.001) return;
+
+    const background = scene._source.background ?? {};
+    const scaleX = Number(background.scaleX ?? 1);
+    const scaleY = Number(background.scaleY ?? 1);
+    const scaleCorrectionX = targetDelta.x / actualDelta.x;
+    const scaleCorrectionY = targetDelta.y / actualDelta.y;
+    const needsScale = Math.abs(scaleCorrectionX - 1) > 0.00001
+      || Math.abs(scaleCorrectionY - 1) > 0.00001;
+
+    if (needsScale) {
+      await scene.update({
+        "background.scaleX": scaleX * scaleCorrectionX,
+        "background.scaleY": scaleY * scaleCorrectionY
+      });
+      continue;
+    }
+
+    const target = snapToGridVertex(scene.grid, first);
+    if (!target) return;
+    const correction = {
+      x: target.x - first.x,
+      y: target.y - first.y
+    };
+    if (Math.abs(correction.x) < 0.001 && Math.abs(correction.y) < 0.001) return;
+
+    await scene.update({
+      "background.offsetX": Number(background.offsetX || 0) + correction.x,
+      "background.offsetY": Number(background.offsetY || 0) + correction.y
+    });
+  }
+}
+
+function snapToGridVertex(grid, point) {
+  try {
+    const snapped = grid.getSnappedPoint(point, {
+      mode: CONST.GRID_SNAPPING_MODES.VERTEX,
+      resolution: 1
+    });
+    if (snapped && Number.isFinite(snapped.x) && Number.isFinite(snapped.y)) {
+      return { x: snapped.x, y: snapped.y };
+    }
+  } catch (_error) {
+    // Fall through to the geometry-based implementation for compatibility.
+  }
+
+  return nearestGridVertex(grid, point, { x: 0, y: 0 });
+}
+
+function candidateDimensions(grid, width, height, padding) {
+  try {
+    const dimensions = grid.calculateDimensions(width, height, padding);
     return {
       x: Number(dimensions.x ?? dimensions.sceneX ?? canvas.dimensions.sceneX),
       y: Number(dimensions.y ?? dimensions.sceneY ?? canvas.dimensions.sceneY)
