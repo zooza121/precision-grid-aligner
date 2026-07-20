@@ -1,0 +1,337 @@
+:root {
+  --pga-green: #42ef76;
+  --pga-green-dark: #168f43;
+  --pga-red: #ff4b4b;
+  --pga-panel-bg: rgba(24, 26, 31, 0.97);
+  --pga-border: rgba(255, 255, 255, 0.18);
+  --pga-text: #f1f1f1;
+  --pga-muted: #b7bbc2;
+}
+
+.pga-hidden {
+  display: none !important;
+}
+
+.pga-launcher {
+  position: fixed;
+  top: 72px;
+  left: 122px;
+  z-index: 110;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--pga-border);
+  border-radius: 6px;
+  color: var(--pga-text);
+  background: rgba(25, 27, 32, 0.92);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+}
+
+.pga-launcher:hover,
+.pga-launcher.pga-active {
+  color: #0e2c18;
+  background: var(--pga-green);
+  border-color: #adffc4;
+}
+
+.pga-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  pointer-events: none;
+}
+
+.pga-preview {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.pga-grid-cell {
+  fill: rgba(66, 239, 118, 0.045);
+  stroke: rgba(66, 239, 118, 0.94);
+  stroke-width: 1.6;
+  vector-effect: non-scaling-stroke;
+}
+
+.pga-grid-line {
+  stroke: rgba(66, 239, 118, 0.94);
+  stroke-width: 1.6;
+  vector-effect: non-scaling-stroke;
+}
+
+.pga-grid-connector {
+  stroke: rgba(255, 255, 255, 0.72);
+  stroke-width: 1.2;
+  stroke-dasharray: 6 5;
+  vector-effect: non-scaling-stroke;
+}
+
+.pga-handle {
+  position: absolute;
+  z-index: 82;
+  width: 58px;
+  height: 58px;
+  padding: 0;
+  transform: translate(-50%, -50%);
+  border: 2px solid rgba(255, 255, 255, 0.92);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.55), 0 4px 12px rgba(0, 0, 0, 0.55);
+  cursor: grab;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.pga-handle-first {
+  background: conic-gradient(from -90deg, rgba(66, 239, 118, 0.92) 0deg 270deg, rgba(255, 255, 255, 0.16) 270deg 360deg);
+}
+
+.pga-handle-second {
+  background: conic-gradient(from 90deg, rgba(66, 239, 118, 0.92) 0deg 270deg, rgba(255, 255, 255, 0.16) 270deg 360deg);
+}
+
+.pga-handle::before,
+.pga-handle::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--pga-red);
+  pointer-events: none;
+}
+
+.pga-handle::before {
+  width: 33px;
+  height: 2px;
+}
+
+.pga-handle::after {
+  width: 2px;
+  height: 33px;
+}
+
+.pga-handle:hover,
+.pga-handle.pga-dragging {
+  filter: brightness(1.14);
+  cursor: grabbing;
+}
+
+.pga-panel {
+  position: fixed;
+  top: 72px;
+  right: 16px;
+  z-index: 120;
+  width: min(380px, calc(100vw - 32px));
+  color: var(--pga-text);
+  background: var(--pga-panel-bg);
+  border: 1px solid var(--pga-border);
+  border-radius: 9px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+  font-size: 14px;
+}
+
+.pga-panel button,
+.pga-panel input {
+  font: inherit;
+}
+
+.pga-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 14px 11px;
+  border-bottom: 1px solid var(--pga-border);
+}
+
+.pga-panel-header h2 {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.pga-panel-header h2 i {
+  color: var(--pga-green);
+}
+
+.pga-panel-header p {
+  margin: 5px 0 0;
+  color: var(--pga-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.pga-icon-button {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 5px;
+  color: var(--pga-text);
+  background: transparent;
+  cursor: pointer;
+}
+
+.pga-icon-button:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.pga-panel-body {
+  display: grid;
+  gap: 13px;
+  padding: 14px;
+}
+
+.pga-fieldset {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 9px 10px 10px;
+  border: 1px solid var(--pga-border);
+  border-radius: 6px;
+}
+
+.pga-fieldset legend {
+  padding: 0 5px;
+  color: var(--pga-muted);
+  font-weight: 600;
+}
+
+.pga-fieldset label,
+.pga-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pga-form-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.pga-number-with-unit {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.pga-number-with-unit input {
+  width: 92px;
+}
+
+.pga-panel input[type="number"] {
+  height: 31px;
+  padding: 4px 7px;
+  color: var(--pga-text);
+  background: rgba(0, 0, 0, 0.27);
+  border: 1px solid var(--pga-border);
+  border-radius: 4px;
+}
+
+.pga-slider-group {
+  display: grid;
+  gap: 6px;
+}
+
+.pga-slider-label-row,
+.pga-slider-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pga-slider-label-row output {
+  color: var(--pga-green);
+  font-variant-numeric: tabular-nums;
+}
+
+.pga-slider-row input[type="range"] {
+  flex: 1 1 auto;
+  min-width: 0;
+  accent-color: var(--pga-green);
+}
+
+.pga-slider-row button,
+.pga-panel-footer button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 31px;
+  padding: 5px 10px;
+  color: var(--pga-text);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--pga-border);
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.pga-slider-row button:hover,
+.pga-panel-footer button:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.pga-status {
+  display: grid;
+  gap: 4px;
+  padding: 9px 10px;
+  background: rgba(66, 239, 118, 0.08);
+  border: 1px solid rgba(66, 239, 118, 0.3);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.pga-status-error {
+  background: rgba(255, 75, 75, 0.09);
+  border-color: rgba(255, 75, 75, 0.42);
+}
+
+.pga-warning {
+  margin: 0;
+  color: #e3c778;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.pga-panel-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 11px 14px;
+  border-top: 1px solid var(--pga-border);
+}
+
+.pga-panel-footer .pga-primary {
+  color: #102817;
+  background: var(--pga-green);
+  border-color: #8ff2aa;
+  font-weight: 700;
+}
+
+.pga-panel-footer .pga-primary:hover {
+  background: #70f495;
+}
+
+@media (max-width: 700px) {
+  .pga-launcher {
+    left: 82px;
+  }
+
+  .pga-panel {
+    top: 56px;
+    right: 8px;
+    width: calc(100vw - 16px);
+    max-height: calc(100vh - 64px);
+    overflow-y: auto;
+  }
+}
